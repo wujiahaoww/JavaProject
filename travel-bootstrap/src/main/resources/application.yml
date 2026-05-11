@@ -1,0 +1,19 @@
+spring:
+  application:
+    name: travel-assistant
+  # 骨架阶段默认排除 Redis 自动配置，避免本地无 Redis 时启动失败；接入 Redis 后删除 exclude 段。
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration
+
+server:
+  port: 8080
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+app:
+  display-name: travel-assistant
