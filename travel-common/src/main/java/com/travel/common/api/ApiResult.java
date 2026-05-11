@@ -8,7 +8,7 @@ package com.travel.common.api;
  *   <li>{@code message}：给人看的说明文字。</li>
  *   <li>{@code data}：成功时的具体数据；失败时多为 {@code null}。</li>
  * </ul>
- *
+ *修改一次
  * @param <T> {@code data} 字段的数据类型（如用户信息、列表等）
  */
 public class ApiResult<T> {
