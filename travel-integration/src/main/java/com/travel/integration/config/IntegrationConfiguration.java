@@ -6,6 +6,7 @@ import com.travel.domain.spi.WeChatSessionGateway;
 import com.travel.integration.hotel.StubHotelSupplier;
 import com.travel.integration.llm.StubLlmClient;
 import com.travel.integration.wechat.WeChatMiniProgramClient;
+import com.travel.integration.wechat.WeChatMiniProgramProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -26,7 +27,7 @@ public class IntegrationConfiguration {
     }
 
     @Bean
-    public WeChatSessionGateway weChatSessionGateway() {
-        return new WeChatMiniProgramClient();
+    public WeChatSessionGateway weChatSessionGateway(WeChatMiniProgramProperties weChatMiniProgramProperties) {
+        return new WeChatMiniProgramClient(weChatMiniProgramProperties);
     }
 }

@@ -23,3 +23,6 @@ Desktop.ini
 *.log
 *.tmp
 *.swp
+
+# JWT RSA PEM（勿提交私钥）
+**/jwt/*.pem

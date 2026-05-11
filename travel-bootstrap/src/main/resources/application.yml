@@ -1,10 +1,22 @@
 spring:
   application:
-    name: travel-assistant
-  # 骨架阶段默认排除 Redis 自动配置，避免本地无 Redis 时启动失败；接入 Redis 后删除 exclude 段。
-  autoconfigure:
-    exclude:
-      - org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration
+    name: travel_assistant
+  datasource:
+    url: jdbc:mysql://localhost:3306/travel_assistant?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai
+    username: root
+    password: wjh555...
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  data:
+    redis:
+      host: 192.168.148.128
+      port: 6379
+      password: wjh555...
+mybatis:
+  mapper-locations: classpath*:mapper/**/*.xml
+  configuration:
+    map-underscore-to-camel-case: true
+    default-fetch-size: 100
+    default-statement-timeout: 30
 
 server:
   port: 8080
@@ -15,5 +27,37 @@ management:
       exposure:
         include: health,info
 
+# 自定义业务配置（由 com.travel.common.properties.AppProperties 绑定，前缀 app）
 app:
   display-name: travel-assistant
+  environment: ${APP_ENV:dev}
+
+  # 跨域：开发联调可设 enabled: true 并填写小程序 / H5 来源；allow-credentials 为 true 时不能使用 allowed-origins: "*"
+  web:
+    cors:
+      enabled: false
+      allowed-origins: []
+      # 示例：
+      # allowed-origins:
+      #   - "https://servicewechat.com"
+
+  # JWT 基础配置：短 access + 长 refresh，RS256（RSA 私钥签、公钥验）；密钥勿提交（见 .gitignore）
+  jwt:
+    issuer: ${APP_JWT_ISSUER:travel-assistant}
+    access-token-ttl: 15m
+    refresh-token-ttl: 14d
+    token-type-claim-name: token_typ
+    access-token-type-value: access
+    refresh-token-type-value: refresh
+    # 需要 RS256 密钥时增加 keys（勿提交 .pem）；未配置则不注册 jwtSigningKey/jwtVerificationKey
+    # keys:
+    #   private-location: classpath:jwt/private.pem
+    #   public-location: classpath:jwt/public.pem
+    # 或通过环境变量（宽松绑定）：APP_JWT_KEYS_PRIVATELOCATION、APP_JWT_KEYS_PUBLICLOCATION
+
+  # 微信小程序（敏感项走环境变量）
+  wechat:
+    mini-program:
+      app-id: ${WECHAT_MINI_APP_ID:}
+      app-secret: ${WECHAT_MINI_APP_SECRET:}
+      jscode2session-url: https://api.weixin.qq.com/sns/jscode2session

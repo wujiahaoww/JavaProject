@@ -13,4 +13,11 @@
     <artifactId>travel-common</artifactId>
     <name>travel-common</name>
     <description>通用组件：统一响应、异常、常量</description>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot</artifactId>
+        </dependency>
+    </dependencies>
 </project>

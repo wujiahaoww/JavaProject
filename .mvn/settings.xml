@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  本工程随仓库提供的 Maven 配置：通过 central 镜像走阿里云公共仓库，加速国内依赖下载。
+  使用方式：项目根目录执行 mvnw / mvnw.cmd（已由 maven.config 指定 -s .mvn/settings.xml）。
+  若需使用公司私服或 ~/.m2/settings.xml 中的账号，可删除 maven.config 中 -s 两行，改在全局 settings 中配置镜像。
+-->
+<settings xmlns="http://maven.apache.org/SETTINGS/1.2.0"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+          xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.2.0 https://maven.apache.org/xsd/settings-1.2.0.xsd">
+
+    <mirrors>
+        <mirror>
+            <id>aliyun-public</id>
+            <mirrorOf>central</mirrorOf>
+            <name>Aliyun mirror of Maven Central</name>
+            <url>https://maven.aliyun.com/repository/central</url>
+        </mirror>
+    </mirrors>
+</settings>
