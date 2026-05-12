@@ -27,7 +27,9 @@ import java.util.Base64;
  * <p><b>作用：</b>当<strong>同时</strong>配置了 {@code app.jwt.keys.private-location} 与
  * {@code app.jwt.keys.public-location} 时，从 PEM 加载 RSA 密钥对并注册 JWT 相关 Bean。</p>
  * <p>算法为 <strong>RS256</strong>（RSA PKCS#1 v1.5 + SHA-256）：私钥仅用于签发，公钥用于验签与解析 {@code sub}。</p>
- * <p>将「有密钥才暴露认证能力」集中在本配置类，避免应用在无密钥时仍注册无法工作的 {@link AuthController}。</p>
+ * <p>将「已配置可读 PEM 才暴露 JWT 相关 Bean」集中在本配置类；refresh 与 Redis 的绑定由 {@link JwtTokenService}
+ * 在运行时完成（不在本类上使用 {@code @ConditionalOnBean(StringRedisTemplate)}，以免与 Redis 自动配置注册顺序冲突，
+ * 导致密钥 Bean 从未创建、登录误报未配置 JWT）。</p>
  * <p><b>生成密钥示例（2048 位，PKCS#8 私钥 + SPKI 公钥）：</b></p>
  * <pre>
  * openssl genpkey -algorithm RSA -out private.pem -pkeyopt rsa_keygen_bits:2048

@@ -22,8 +22,8 @@ public enum GlobalErrorCode {
     /** access 令牌过期、签名不对、类型不对等 */
     TOKEN_INVALID_OR_EXPIRED(40101, "访问令牌无效或已过期"),
 
-    /** refresh 令牌不合法或过期 */
-    REFRESH_TOKEN_INVALID(40102, "刷新令牌无效或已过期"),
+    /** refresh 在服务端 Redis 中无绑定或已消费，需重新登录 */
+    REFRESH_TOKEN_INVALID(40102, "刷新令牌无效或已失效，请重新登录"),
 
     /** 已登录但无权限访问该资源 */
     FORBIDDEN(40300, "无权限"),
@@ -62,7 +62,7 @@ public enum GlobalErrorCode {
     INTERNAL_ERROR(50000, "系统繁忙，请稍后重试"),
 
     /** 未配置 RSA 私钥等导致无法签发 JWT */
-    JWT_NOT_CONFIGURED(50301, "服务端未配置 JWT 签名密钥"),
+    JWT_NOT_CONFIGURED(50301, "服务端未完成 JWT 签发配置（请检查 app.jwt.keys 的 PEM 路径及 Redis 是否可用）"),
 
     /** 未启用 Redis，无法使用验证码能力 */
     REDIS_NOT_AVAILABLE(50302, "服务端未启用缓存，无法发送验证码");

@@ -8,80 +8,98 @@ import io.jsonwebtoken.ExpiredJwtException;
 import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
 import java.security.interfaces.RSAPrivateKey;
 import java.security.interfaces.RSAPublicKey;
 import java.util.Date;
+import java.util.UUID;
 
 /**
  * <p><b>作用：</b>用户模块 JWT 核心服务：<strong>RS256</strong>（RFC 7518）——
- * 使用 {@link RSAPrivateKey} 对 JWT 签名，使用 {@link RSAPublicKey} 验签；与 JJWT 的 {@code Jwts.SIG.RS256} 对应。</p>
+ * 私钥签发、公钥验签；与 JJWT 的 {@code Jwts.SIG.RS256} 对应。</p>
  * <ul>
- *   <li><b>签发</b>：{@link #issuePair(String)}，用于登录 / 注册并登录、刷新成功后。</li>
- *   <li><b>校验 access</b>：{@link #validateAccessToken(String)}，供过滤器走公钥验签 + iss + 类型 claim。</li>
- *   <li><b>刷新</b>：{@link #rotateFromRefresh(String)}，仅接受 refresh 类型，通过后旋转签发新的一对令牌。</li>
+ *   <li><b>签发</b>：{@link #issuePair(String)}；refresh 带标准 {@code jti}；Redis 以用户 {@code sub} 为 key、当前 {@code jti} 为 value，TTL 与 refresh 过期一致（同用户再次登录会覆盖旧 jti）。</li>
+ *   <li><b>校验 access</b>：{@link #validateAccessToken(String)}，无 Redis 参与。</li>
+ *   <li><b>刷新</b>：{@link #rotateFromRefresh(String)} — 验签后用 {@code sub} 查 Redis 中的 jti，与令牌 {@code jti} 一致则旋转签发新一对并更新 Redis；否则拒绝并提示重新登录。</li>
  * </ul>
- * <p>access 与 refresh 通过 {@link AppProperties.Jwt#getTokenTypeClaimName()} 与两类取值区分，禁止混用。</p>
- * <p>仅在容器中存在 {@link RSAPrivateKey} Bean 时注册（与 {@link com.travel.user.config.JwtKeyConfiguration} 一致）。</p>
+ * <p>在存在 {@link RSAPrivateKey} Bean（由 {@link com.travel.user.config.JwtKeyConfiguration} 在配置了 PEM 路径后注册）时启用；
+ * {@link StringRedisTemplate} 通过构造器注入，由 Spring 按依赖顺序解析，避免在类上使用
+ * {@code @ConditionalOnBean(StringRedisTemplate)} 与 Redis 自动配置顺序冲突。</p>
  */
 @Service
 @ConditionalOnBean(RSAPrivateKey.class)
 public class JwtTokenService {
 
+    /** Redis 中 refresh 绑定：key = 前缀 + 用户 {@code sub}，value = 当前有效的 JWT {@code jti} */
+    private static final String REDIS_REFRESH_USER_PREFIX = "travel:jwt:refresh:user:";
+
     private final AppProperties appProperties;
     private final RSAPrivateKey signingKey;
     private final RSAPublicKey verificationKey;
+    private final StringRedisTemplate stringRedisTemplate;
 
-    public JwtTokenService(AppProperties appProperties, RSAPrivateKey signingKey, RSAPublicKey verificationKey) {
+    public JwtTokenService(
+            AppProperties appProperties,
+            RSAPrivateKey signingKey,
+            RSAPublicKey verificationKey,
+            StringRedisTemplate stringRedisTemplate
+    ) {
         this.appProperties = appProperties;
         this.signingKey = signingKey;
         this.verificationKey = verificationKey;
+        this.stringRedisTemplate = stringRedisTemplate;
     }
 
     /**
-     * 为指定 {@code subject}（通常 openid 或内部 userId）签发一对新令牌。
+     * 为指定 {@code subject} 签发 access + refresh；refresh 写入标准 {@code jti}；Redis 以用户为 key 记录当前 jti。
      */
     public TokenPair issuePair(String subject) {
+        String sub = subject == null ? "" : subject.trim();
+        if (sub.isEmpty()) {
+            throw new BusinessException(GlobalErrorCode.BAD_REQUEST, "签发令牌时 subject 不能为空");
+        }
         Date now = new Date();
         var jwt = appProperties.getJwt();
         String typClaim = jwt.getTokenTypeClaimName();
+        String refreshJti = UUID.randomUUID().toString().replace("-", "");
 
-        // —— access：短期，用于日常 API 的 Authorization 头 ——
         Date accessExp = new Date(now.getTime() + jwt.getAccessTokenTtl().toMillis());
         String access = Jwts.builder()
-                .subject(subject)
+                .subject(sub)
                 .issuer(jwt.getIssuer())
                 .claim(typClaim, jwt.getAccessTokenTypeValue())
                 .issuedAt(now)
                 .expiration(accessExp)
-                // RS256：RSA 私钥签名，Header 中 alg=RS256
                 .signWith(signingKey, Jwts.SIG.RS256)
                 .compact();
 
-        // —— refresh：长期，仅用于调用 /auth/refresh ——
         Date refreshExp = new Date(now.getTime() + jwt.getRefreshTokenTtl().toMillis());
         String refresh = Jwts.builder()
-                .subject(subject)
+                .id(refreshJti)
+                .subject(sub)
                 .issuer(jwt.getIssuer())
                 .claim(typClaim, jwt.getRefreshTokenTypeValue())
                 .issuedAt(now)
                 .expiration(refreshExp)
-                // RS256：与 access 同一私钥，类型 claim 区分 refresh
                 .signWith(signingKey, Jwts.SIG.RS256)
                 .compact();
 
-        // 返回给前端的过期秒数（至少 1，避免除零或歧义）
+        // Redis：用户 -> 当前有效 jti；TTL 与 refresh JWT 一致（再次登录会覆盖，使旧 refresh 失效）
+        stringRedisTemplate.opsForValue().set(
+                REDIS_REFRESH_USER_PREFIX + sub,
+                refreshJti,
+                jwt.getRefreshTokenTtl()
+        );
+
         long accessSec = Math.max(1, jwt.getAccessTokenTtl().getSeconds());
         long refreshSec = Math.max(1, jwt.getRefreshTokenTtl().getSeconds());
-        return new TokenPair(access, refresh, accessSec, refreshSec, subject);
+        return new TokenPair(access, refresh, accessSec, refreshSec, sub);
     }
 
     /**
-     * <strong>刷新令牌</strong>：用公钥校验 refresh 的签名、{@code iss}、过期时间与类型 claim；
-     * 通过后使用私钥为同一 {@code sub} 重新签发<strong>新的</strong> access 与 refresh（旋转刷新）。
-     * <p>客户端拿到新令牌后应<strong>丢弃旧 refresh</strong>；旧 refresh 仍在过期时间前理论上可重复使用，
-     * 若需服务端强制一次性刷新，可后续结合 Redis 记录 jti 黑名单扩展。</p>
+     * 刷新：验签 + 校验类型后，用用户 {@code sub} 从 Redis 取当前 jti，与令牌中 {@code jti} 一致则旋转签发新一对（并更新 Redis）；否则要求重新登录。
      */
     public TokenPair rotateFromRefresh(String refreshToken) {
         Claims claims = parseSignedClaims(refreshToken, GlobalErrorCode.REFRESH_TOKEN_INVALID);
@@ -90,12 +108,25 @@ public class JwtTokenService {
         if (subject == null || subject.isBlank()) {
             throw new BusinessException(GlobalErrorCode.REFRESH_TOKEN_INVALID);
         }
-        return issuePair(subject);
+        String sub = subject.trim();
+        String jti = claims.getId();
+        if (jti == null || jti.isBlank()) {
+            throw new BusinessException(GlobalErrorCode.REFRESH_TOKEN_INVALID, "刷新令牌缺少会话标识，请重新登录");
+        }
+
+        String redisKey = REDIS_REFRESH_USER_PREFIX + sub;
+        String storedJti = stringRedisTemplate.opsForValue().get(redisKey);
+        if (storedJti == null || storedJti.isBlank()) {
+            throw new BusinessException(GlobalErrorCode.REFRESH_TOKEN_INVALID, "刷新令牌已失效，请重新登录");
+        }
+        if (!jti.trim().equals(storedJti.trim())) {
+            throw new BusinessException(GlobalErrorCode.REFRESH_TOKEN_INVALID, "刷新令牌已失效，请重新登录");
+        }
+
+        // 与 issuePair 内 SET 形成旋转：新 refresh 对应新 jti；旧 refresh 因 jti 不再匹配而不可用
+        return issuePair(sub);
     }
 
-    /**
-     * 供过滤器调用：验证 access 令牌并返回 subject。
-     */
     public String validateAccessToken(String token) {
         Claims claims = parseSignedClaims(token, GlobalErrorCode.TOKEN_INVALID_OR_EXPIRED);
         assertTokenType(claims, appProperties.getJwt().getAccessTokenTypeValue(), GlobalErrorCode.TOKEN_INVALID_OR_EXPIRED);
@@ -106,7 +137,6 @@ public class JwtTokenService {
         return subject;
     }
 
-    /** 确保 JWT 上自定义「类型」claim 与期望一致（防止用 refresh 当 access 用） */
     private void assertTokenType(Claims claims, String expected, GlobalErrorCode errorCode) {
         Object v = claims.get(appProperties.getJwt().getTokenTypeClaimName());
         if (v == null || !expected.equals(String.valueOf(v))) {
@@ -114,7 +144,6 @@ public class JwtTokenService {
         }
     }
 
-    /** 公钥验签 + 校验 iss；过期或格式错误转为业务异常 */
     private Claims parseSignedClaims(String token, GlobalErrorCode onFailure) {
         try {
             return Jwts.parser()
