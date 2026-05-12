@@ -44,12 +44,21 @@ public class UserController {
     }
 
     /**
-     * 微信小程序 {@code wx.login} 拿到的临时码换本系统 JWT（access + refresh）。
-     * 请求体为 JSON：{@code { "jsCode": "..." }}。
+     * 微信<strong>登录</strong>：用 {@code jsCode} 换 subject 后签发 RS256 的 access + refresh（登录阶段发令牌）。
+     * 请求体：{@code { "jsCode": "..." }}。
      */
     @PostMapping("/login/wechat")
     public ApiResult<LoginResponse> wechatLogin(@RequestBody WechatLoginRequest request) {
         return ApiResult.ok(userApplicationService.loginWithWeChat(request.jsCode()));
+    }
+
+    /**
+     * 微信<strong>注册并登录</strong>：与 {@link #wechatLogin} 业务一致，便于前端区分「首次进入」与「老用户登录」路由；
+     * 服务端均在身份校验通过后发放双令牌。
+     */
+    @PostMapping("/register/wechat")
+    public ApiResult<LoginResponse> wechatRegister(@RequestBody WechatLoginRequest request) {
+        return ApiResult.ok(userApplicationService.registerWithWeChat(request.jsCode()));
     }
 
     /**

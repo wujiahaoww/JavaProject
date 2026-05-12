@@ -36,6 +36,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
      */
     private final List<String> whitelistPatterns = List.of(
             "/api/v1/users/login/wechat",
+            "/api/v1/users/register/wechat",
             "/api/v1/auth/refresh",
             "/api/v1/public/**"
     );
