@@ -34,11 +34,38 @@ public enum GlobalErrorCode {
     /** 触发限流等 */
     TOO_MANY_REQUESTS(42900, "请求过于频繁"),
 
+    /** 验证码发送过于频繁（单号码冷却） */
+    OTP_SEND_COOLDOWN(40010, "发送过于频繁，请稍后再试"),
+
+    /** 同一联系方式当日发送次数超限 */
+    OTP_SEND_LIMIT_CONTACT(40011, "该号码或邮箱今日获取验证码次数已达上限"),
+
+    /** 同一 IP 短时发送次数超限 */
+    OTP_SEND_LIMIT_IP(40012, "当前网络请求过于频繁，请稍后再试"),
+
+    /** 验证码连续错误达到上限，账户校验已暂时锁定 */
+    OTP_LOCKED(40013, "验证码错误次数过多，请稍后再试"),
+
+    /** 验证码错误或已失效 */
+    OTP_INVALID(40014, "验证码错误或已过期"),
+
+    /** 账号或密码错误（不区分具体原因，防枚举） */
+    INVALID_CREDENTIALS(40103, "账号或密码错误"),
+
+    /** 用户不存在（登录等场景） */
+    USER_NOT_FOUND(40401, "用户不存在"),
+
+    /** 手机号或邮箱已被注册 */
+    USER_ALREADY_EXISTS(40901, "该手机号或邮箱已注册"),
+
     /** 未预期的服务端错误 */
     INTERNAL_ERROR(50000, "系统繁忙，请稍后重试"),
 
     /** 未配置 RSA 私钥等导致无法签发 JWT */
-    JWT_NOT_CONFIGURED(50301, "服务端未配置 JWT 签名密钥");
+    JWT_NOT_CONFIGURED(50301, "服务端未配置 JWT 签名密钥"),
+
+    /** 未启用 Redis，无法使用验证码能力 */
+    REDIS_NOT_AVAILABLE(50302, "服务端未启用缓存，无法发送验证码");
 
     /** 返回给前端的数字错误码 */
     private final int code;
@@ -65,12 +92,13 @@ public enum GlobalErrorCode {
      */
     public int getSuggestedHttpStatus() {
         return switch (this) {
-            case UNAUTHORIZED, TOKEN_INVALID_OR_EXPIRED, REFRESH_TOKEN_INVALID -> 401;
+            case UNAUTHORIZED, TOKEN_INVALID_OR_EXPIRED, REFRESH_TOKEN_INVALID, INVALID_CREDENTIALS -> 401;
             case FORBIDDEN -> 403;
-            case NOT_FOUND -> 404;
-            case TOO_MANY_REQUESTS -> 429;
+            case NOT_FOUND, USER_NOT_FOUND -> 404;
+            case USER_ALREADY_EXISTS -> 409;
+            case TOO_MANY_REQUESTS, OTP_LOCKED, OTP_SEND_COOLDOWN, OTP_SEND_LIMIT_CONTACT, OTP_SEND_LIMIT_IP -> 429;
             case INTERNAL_ERROR -> 500;
-            case JWT_NOT_CONFIGURED -> 503;
+            case JWT_NOT_CONFIGURED, REDIS_NOT_AVAILABLE -> 503;
             case SUCCESS -> 200;
             default -> 400;
         };

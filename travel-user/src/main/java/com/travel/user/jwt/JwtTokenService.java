@@ -15,9 +15,15 @@ import java.security.interfaces.RSAPublicKey;
 import java.util.Date;
 
 /**
- * <p><b>作用：</b>JWT 的核心服务：用 RSA 私钥签发、用公钥校验；access 与 refresh 通过配置中的
- * {@link AppProperties.Jwt#getTokenTypeClaimName()} 声明区分，算法固定为 RS256。</p>
- * <p>仅在 Spring 容器中存在 {@link RSAPrivateKey} Bean 时注册（与密钥配置一致），避免无密钥时误用。</p>
+ * <p><b>作用：</b>用户模块 JWT 核心服务：<strong>RS256</strong>（RFC 7518）——
+ * 使用 {@link RSAPrivateKey} 对 JWT 签名，使用 {@link RSAPublicKey} 验签；与 JJWT 的 {@code Jwts.SIG.RS256} 对应。</p>
+ * <ul>
+ *   <li><b>签发</b>：{@link #issuePair(String)}，用于登录 / 注册并登录、刷新成功后。</li>
+ *   <li><b>校验 access</b>：{@link #validateAccessToken(String)}，供过滤器走公钥验签 + iss + 类型 claim。</li>
+ *   <li><b>刷新</b>：{@link #rotateFromRefresh(String)}，仅接受 refresh 类型，通过后旋转签发新的一对令牌。</li>
+ * </ul>
+ * <p>access 与 refresh 通过 {@link AppProperties.Jwt#getTokenTypeClaimName()} 与两类取值区分，禁止混用。</p>
+ * <p>仅在容器中存在 {@link RSAPrivateKey} Bean 时注册（与 {@link com.travel.user.config.JwtKeyConfiguration} 一致）。</p>
  */
 @Service
 @ConditionalOnBean(RSAPrivateKey.class)
@@ -49,6 +55,7 @@ public class JwtTokenService {
                 .claim(typClaim, jwt.getAccessTokenTypeValue())
                 .issuedAt(now)
                 .expiration(accessExp)
+                // RS256：RSA 私钥签名，Header 中 alg=RS256
                 .signWith(signingKey, Jwts.SIG.RS256)
                 .compact();
 
@@ -60,6 +67,7 @@ public class JwtTokenService {
                 .claim(typClaim, jwt.getRefreshTokenTypeValue())
                 .issuedAt(now)
                 .expiration(refreshExp)
+                // RS256：与 access 同一私钥，类型 claim 区分 refresh
                 .signWith(signingKey, Jwts.SIG.RS256)
                 .compact();
 
@@ -70,7 +78,10 @@ public class JwtTokenService {
     }
 
     /**
-     * 校验 refresh 签名与类型后，为同一 {@code sub} 重新签发一对令牌（旧 refresh 即作废语义由客户端丢弃旧令牌实现）。
+     * <strong>刷新令牌</strong>：用公钥校验 refresh 的签名、{@code iss}、过期时间与类型 claim；
+     * 通过后使用私钥为同一 {@code sub} 重新签发<strong>新的</strong> access 与 refresh（旋转刷新）。
+     * <p>客户端拿到新令牌后应<strong>丢弃旧 refresh</strong>；旧 refresh 仍在过期时间前理论上可重复使用，
+     * 若需服务端强制一次性刷新，可后续结合 Redis 记录 jti 黑名单扩展。</p>
      */
     public TokenPair rotateFromRefresh(String refreshToken) {
         Claims claims = parseSignedClaims(refreshToken, GlobalErrorCode.REFRESH_TOKEN_INVALID);

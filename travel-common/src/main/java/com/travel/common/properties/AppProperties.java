@@ -15,7 +15,6 @@ import java.util.List;
  * <p><b>安全提示：</b>JWT 私钥路径只应指向服务器本地或密钥管理服务，切勿把私钥内容提交到 Git。</p>
  */
 
-//第一次修改
 @ConfigurationProperties(prefix = "app")
 public class AppProperties {
 

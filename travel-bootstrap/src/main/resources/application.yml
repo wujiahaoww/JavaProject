@@ -27,7 +27,9 @@ management:
       exposure:
         include: health,info
 
-# 自定义业务配置（由 com.travel.common.properties.AppProperties 绑定，前缀 app）
+# ---------------------------------------------------------------------------
+# 自定义业务配置（前缀 app，绑定类：com.travel.common.properties.AppProperties）
+# ---------------------------------------------------------------------------
 app:
   display-name: travel-assistant
   environment: ${APP_ENV:dev}
@@ -41,19 +43,59 @@ app:
       # allowed-origins:
       #   - "https://servicewechat.com"
 
-  # JWT 基础配置：短 access + 长 refresh，RS256（RSA 私钥签、公钥验）；密钥勿提交（见 .gitignore）
+  # -------------------------------------------------------------------------
+  # JWT（RS256：RSA 私钥签名、RSA 公钥验签；库：JJWT，算法常量 Jwts.SIG.RS256）
+  # -------------------------------------------------------------------------
+  # 令牌生命周期与业务约定：
+  #   1）登录 / 注册并登录：POST /api/v1/users/login/wechat 或 /register/wechat
+  #      校验微信 jsCode 后签发 access + refresh（见 JwtTokenService#issuePair）。
+  #   2）刷新：POST /api/v1/auth/refresh，Body: { "refreshToken": "<refresh>" }
+  #      校验 refresh 后旋转签发新的一对令牌（旧 refresh 应丢弃，见 rotateFromRefresh）。
+  #   3）受保护接口：Header Authorization: Bearer <access>，由 JwtAuthenticationFilter 公钥验签。
+  #
+  # 环境变量（宽松绑定，下划线与大小写可混用，示例）：
+  #   APP_JWT_ISSUER                    -> app.jwt.issuer
+  #   APP_JWT_ACCESSTOKENTTL            -> app.jwt.access-token-ttl（如 15m、900s）
+  #   APP_JWT_REFRESHTOKENTTL           -> app.jwt.refresh-token-ttl（如 14d）
+  #   APP_JWT_TOKENTYPECLAIMNAME      -> app.jwt.token-type-claim-name
+  #   APP_JWT_ACCESSTOKENTYPEVALUE    -> app.jwt.access-token-type-value
+  #   APP_JWT_REFRESHTOKENTYPEVALUE   -> app.jwt.refresh-token-type-value
+  #   APP_JWT_KEYS_PRIVATELOCATION    -> app.jwt.keys.private-location
+  #   APP_JWT_KEYS_PUBLICLOCATION     -> app.jwt.keys.public-location
+  #
+  # 密钥文件：PKCS#8 私钥（BEGIN PRIVATE KEY）、SPKI 公钥（BEGIN PUBLIC KEY），路径勿提交仓库（见 .gitignore **/jwt/*.pem）。
+  # 生成示例：
+  #   openssl genpkey -algorithm RSA -out private.pem -pkeyopt rsa_keygen_bits:2048
+  #   openssl pkey -in private.pem -pubout -out public.pem
+  # 将 PEM 放到 resources/jwt/ 下时可用 classpath:jwt/private.pem（不要提交 private.pem）。
   jwt:
+    # iss：签发方标识，验签时必须一致
     issuer: ${APP_JWT_ISSUER:travel-assistant}
+    # access：短期，供日常 API
     access-token-ttl: 15m
+    # refresh：长期，仅用于 /api/v1/auth/refresh
     refresh-token-ttl: 14d
+    # 自定义 claim 名与取值，用于区分 access / refresh，防止混用
     token-type-claim-name: token_typ
     access-token-type-value: access
     refresh-token-type-value: refresh
-    # 需要 RS256 密钥时增加 keys（勿提交 .pem）；未配置则不注册 jwtSigningKey/jwtVerificationKey
-    # keys:
-    #   private-location: classpath:jwt/private.pem
-    #   public-location: classpath:jwt/public.pem
-    # 或通过环境变量（宽松绑定）：APP_JWT_KEYS_PRIVATELOCATION、APP_JWT_KEYS_PUBLICLOCATION
+    # 本地开发：PEM 放在 resources/jwt/（private.pem 已被 .gitignore 忽略，勿提交仓库）
+    keys:
+      private-location: classpath:jwt/private.pem
+      public-location: classpath:jwt/public.pem
+
+  # 手机/邮箱注册登录：验证码、防刷、锁定（绑定 UserSecurityProperties）
+  user:
+    security:
+      password-min-length: 8
+      otp:
+        code-length: 6
+        ttl: 1m
+        lock-duration: 5m
+        max-verify-failures: 5
+        send-cooldown: 60s
+        daily-max-sends-per-contact: 10
+        hourly-max-sends-per-ip: 30
 
   # 微信小程序（敏感项走环境变量）
   wechat:

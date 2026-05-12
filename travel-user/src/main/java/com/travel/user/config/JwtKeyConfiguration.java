@@ -24,8 +24,9 @@ import java.security.spec.X509EncodedKeySpec;
 import java.util.Base64;
 
 /**
- * <p><b>作用：</b>当配置了 {@code app.jwt.keys.private-location} 时，从 PEM 文件加载 RSA 密钥对，
- * 并注册与 JWT 相关的 Bean：签名/验签密钥、刷新控制器、认证过滤器。</p>
+ * <p><b>作用：</b>当<strong>同时</strong>配置了 {@code app.jwt.keys.private-location} 与
+ * {@code app.jwt.keys.public-location} 时，从 PEM 加载 RSA 密钥对并注册 JWT 相关 Bean。</p>
+ * <p>算法为 <strong>RS256</strong>（RSA PKCS#1 v1.5 + SHA-256）：私钥仅用于签发，公钥用于验签与解析 {@code sub}。</p>
  * <p>将「有密钥才暴露认证能力」集中在本配置类，避免应用在无密钥时仍注册无法工作的 {@link AuthController}。</p>
  * <p><b>生成密钥示例（2048 位，PKCS#8 私钥 + SPKI 公钥）：</b></p>
  * <pre>
@@ -34,7 +35,7 @@ import java.util.Base64;
  * </pre>
  */
 @Configuration
-@ConditionalOnProperty(prefix = "app.jwt.keys", name = "private-location")
+@ConditionalOnProperty(prefix = "app.jwt.keys", name = {"private-location", "public-location"})
 public class JwtKeyConfiguration {
 
     private final AppProperties appProperties;
